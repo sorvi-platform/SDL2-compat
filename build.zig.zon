@@ -1,0 +1,34 @@
+.{
+    .name = .SDL2,
+    .version = "2.32.10",
+    .fingerprint = 0x1b740bc5ab3c5fb7,
+    .minimum_zig_version = "0.15.0",
+    .dependencies = .{
+        .@"sdl2-compat" = .{
+            .url = "git+https://github.com/libsdl-org/sdl2-compat.git#99c147df4408cebbc30c255d4788b0c81a5112a0",
+            .hash = "N-V-__8AAOEOdANP6DOO_0dDTXjLm2eIRTPk0iIt8RRqoaSW",
+        },
+        .SDL_image = .{
+            .url = "git+https://github.com/libsdl-org/SDL_image#release-2.8.8",
+            .hash = "N-V-__8AAKRucwHcn1zFy3DOHtYOAEi4o2snwimP-Ot_4S01",
+        },
+        .harfbuzz = .{
+            .url = "git+https://github.com/allyourcodebase/harfbuzz#6bb522d22cee0ce1d1446bd59fa5b0417f25303e",
+            .hash = "harfbuzz-8.5.0-Ip1VAqCZAADRh-K2AVujG0N3VAal-AKwkZrvlYOaloyB",
+        },
+        .freetype = .{
+            .url = "git+https://github.com/allyourcodebase/freetype#9d847affbd224cf6a7303ad6d98715e3675ef78c",
+            .hash = "freetype-2.13.3-C3-WdeyJAAD9z8BeYYQ8N3gNlPI9NvHRxg5039S5vhz7",
+        },
+        .SDL_ttf = .{
+            .url = "git+https://github.com/libsdl-org/SDL_ttf#release-2.24.0",
+            .hash = "N-V-__8AAExyawHN-VzU8pDUcAbATFXJ-rvnOkSgARNDjyJb",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "LICENCE.txt",
+        "src",
+    },
+}
