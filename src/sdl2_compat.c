@@ -47,7 +47,7 @@ This breaks the build when creating SDL_ ## DisableScreenSaver
  * The number might increment past 90 if there are a ton of releases.
  */
 #define SDL2_COMPAT_VERSION_MINOR 32
-#define SDL2_COMPAT_VERSION_PATCH 62
+#define SDL2_COMPAT_VERSION_PATCH 69
 
 #ifndef SDL2COMPAT_REVISION
 #define SDL2COMPAT_REVISION "SDL-2." STRINGIFY(SDL2_COMPAT_VERSION_MINOR) "." STRINGIFY(SDL2_COMPAT_VERSION_PATCH) "-no-vcs"
@@ -56,12 +56,27 @@ This breaks the build when creating SDL_ ## DisableScreenSaver
 #include <stdarg.h>
 #include <limits.h>
 #include <stddef.h>
+#if defined(_MSC_VER) && (_MSC_VER < 1600)
+/* intptr_t already handled by stddef.h. */
+#else
 #include <stdint.h>
+#endif
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN 1
+#endif
+#include <windows.h>
+#undef HAVE_STDIO_H
+#else
 #include <stdio.h> /* fprintf(), etc. */
 #include <stdlib.h>    /* for abort() */
 #include <string.h>
 #define HAVE_STDIO_H 1
+#endif
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 
 /* mingw headers may define these ... */
 #undef strtod
@@ -70,7 +85,20 @@ This breaks the build when creating SDL_ ## DisableScreenSaver
 #undef snprintf
 #undef vsnprintf
 
+#if defined(__linux__) || defined(__GNU__)
+#include <unistd.h> /* for readlink() */
+#endif
+
+#if defined(SDL_PLATFORM_UNIX) || defined(__APPLE__)
+#ifndef PATH_MAX
+#define PATH_MAX 1024
+#endif
+#define SDL2COMPAT_MAXPATH PATH_MAX
+#elif defined _WIN32
+#define SDL2COMPAT_MAXPATH MAX_PATH
+#else
 #define SDL2COMPAT_MAXPATH 1024
+#endif
 
 /* SDL2 function prototypes:  */
 #include "sdl2_protos.h"
@@ -80,10 +108,22 @@ This breaks the build when creating SDL_ ## DisableScreenSaver
 extern "C" {
 #endif
 
+/** Define SDL2COMPAT_TEST_SYMS=1 to have warnings about wrong prototypes of src/sdl3_sym.h
+ *  It won't compile but it helps to make sure it's sync'ed with SDL3 headers.
+ */
+#ifndef SDL2COMPAT_TEST_SYMS
+#define SDL2COMPAT_TEST_SYMS 0
+#endif
+#if SDL2COMPAT_TEST_SYMS
+#define SDL3_SYM(rc,fn,params,args,ret) \
+    typedef rc (SDLCALL *SDL3_##fn##_t) params; \
+    static SDL3_##fn##_t SDL3_##fn = IGNORE_THIS_VERSION_OF_SDL_##fn;
+#else
 #define SDL3_SYM(rc,fn,params,args,ret) \
     rc SDLCALL SDL_##fn##_REAL params; \
     typedef rc (SDLCALL *SDL3_##fn##_t) params; \
     static SDL3_##fn##_t SDL3_##fn = &SDL_##fn##_REAL;
+#endif
 #include "sdl3_syms.h"
 
 /* Things that _should_ be binary compatible pass right through... */
@@ -141,6 +181,9 @@ do { \
 #define SDL3_stack_free(data)            SDL3_free(data)
 #endif
 
+#ifdef _MSC_VER /* SDL_MAX_SMALL_ALLOC_STACKSIZE is smaller than _ALLOCA_S_THRESHOLD and should be generally safe */
+#pragma warning(disable : 6255)
+#endif
 #define SDL_MAX_SMALL_ALLOC_STACKSIZE          128
 #define SDL3_small_alloc(type, count, pisstack) ((*(pisstack) = ((sizeof(type) * (count)) < SDL_MAX_SMALL_ALLOC_STACKSIZE)), (*(pisstack) ? SDL3_stack_alloc(type, count) : (type *)SDL3_malloc(sizeof(type) * (count))))
 #define SDL3_small_free(ptr, isstack) \
@@ -159,6 +202,8 @@ do { \
 #define PROP_WINDOW_EXPECTED_HEIGHT "sdl2-compat.window.expected_height"
 #define PROP_WINDOW_EXPECTED_SCALE "sdl2-compat.window.expected_scale"
 #define PROP_WINDOW_GAMMA_RAMP "sdl2-compat.window.gamma_ramp"
+#define PROP_WINDOW_MOUSE_GRABBED "sdl2-compat.window.mouse_grabbed"
+#define PROP_WINDOW_KEYBOARD_GRABBED "sdl2-compat.window.keyboard_grabbed"
 #define PROP_RENDERER_BATCHING "sdl2-compat.renderer.batching"
 #define PROP_RENDERER_RELATIVE_SCALING "sdl2-compat.renderer.relative-scaling"
 #define PROP_RENDERER_INTEGER_SCALE "sdl2-compat.renderer.integer_scale"
@@ -167,6 +212,7 @@ do { \
 #define PROP_STREAM2 "sdl2-compat.stream2"
 
 #define PROP_TEXTURE_SCALE_MODE_UNAVAILABLE (-42)
+
 
 static bool WantDebugLogging = false;
 static SDL_InitState InitSDL2CompatGlobals;
@@ -255,24 +301,43 @@ static char *SDL2Compat_strrchr(const char *string, int c)
 /* log a string using platform-specific code for before SDL3 is fully available. */
 static void SDL2Compat_LogAtStartup(const char *str)
 {
+    #ifdef SDL_PLATFORM_WINDOWS
+    OutputDebugStringA(str);
+    #elif defined(SDL_PLATFORM_ANDROID)
+    __android_log_write(ANDROID_LOG_INFO, "sdl2-compat", str);
+    #elif defined(SDL_PLATFORM_APPLE)
+    extern void SDL2Compat_NSLog(const char *prefix, const char *text);
+    SDL2Compat_NSLog(NULL, str);
+    #else
     fputs(str, stderr);
     fputs("\n", stderr);
+    #endif
 }
 
 /* this talks right to the OS environment table. Don't use SDL3_setenv at startup. */
 static void SDL2Compat_SetEnvAtStartup(const char *name, const char *value)
 {
+    #ifdef SDL_PLATFORM_WINDOWS
+    SetEnvironmentVariableA(name, value);
+    #else  /* we might need other platforms, or a simple `return;` for platforms without an environment table. */
     if (value) {
         setenv(name, value, 1);
     } else {
         unsetenv(name);
     }
+    #endif
 }
 
 /* this talks right to the OS environment table. Don't use SDL3_getenv at startup. */
 static const char *SDL2Compat_GetEnvAtStartup(const char *name)
 {
+    #ifdef SDL_PLATFORM_WINDOWS
+    static char buf[256];  /* overflows will just report as environment variable being unset. But most of our environment vars don't come through here. */
+    const DWORD rc = GetEnvironmentVariableA(name, buf, (DWORD) sizeof (buf));
+    return ((rc != 0) && (rc < sizeof (buf))) ? buf : NULL;
+    #else  /* we might need other platforms, or a simple `return NULL;` for platforms without an environment table. */
     return getenv(name);
+    #endif
 }
 
 
@@ -286,9 +351,121 @@ static bool SDL2Compat_CheckDebugLogging(void)
     return value && SDL2Compat_strequal(value, "1");
 }
 
+
+/* Obviously we can't use SDL_LoadObject() to load SDL3.  :)  */
+/* FIXME: Updated library names after https://github.com/libsdl-org/SDL/issues/5626 solidifies.  */
+static char loaderror[256];
+#if defined(_WIN32)
+    static HMODULE Loaded_SDL3 = NULL;
+    #define DIRSEP "\\"
+    #define SDL3_LIBNAME "SDL3.dll"
+    #define LoadSDL3Library() ((Loaded_SDL3 = LoadLibraryA(SDL3_LIBNAME)) != NULL)
+    #define LookupSDL3Sym(sym) (void *)GetProcAddress(Loaded_SDL3, sym)
+    #define CloseSDL3Library() { if (Loaded_SDL3) { FreeLibrary(Loaded_SDL3); Loaded_SDL3 = NULL; } }
+#elif defined(__APPLE__)
+    #include <dlfcn.h>
+    #include <pwd.h>
+    #include <unistd.h>
+    #define SDL3_LIBNAME "libSDL3.dylib"
+    #define SDL3_FRAMEWORK "SDL3.framework/Versions/A/SDL3"
+    static void *Loaded_SDL3 = NULL;
+    #define LookupSDL3Sym(sym) dlsym(Loaded_SDL3, sym)
+    #define CloseSDL3Library() { if (Loaded_SDL3) { dlclose(Loaded_SDL3); Loaded_SDL3 = NULL; } }
+    static bool LoadSDL3Library(void) {
+        /* I don't know if this is the _right_ order to try, but this seems reasonable */
+        static const char * const dylib_locations[] = {
+            "@loader_path/" SDL3_LIBNAME, /* MyApp.app/Contents/MacOS/libSDL3.dylib */
+            "@loader_path/../Frameworks/" SDL3_FRAMEWORK, /* MyApp.app/Contents/Frameworks/SDL2.framework */
+            "@executable_path/" SDL3_LIBNAME, /* MyApp.app/Contents/MacOS/libSDL3.dylib */
+            "@executable_path/../Frameworks/" SDL3_FRAMEWORK, /* MyApp.app/Contents/Frameworks/SDL2.framework */
+            NULL,  /* /Users/username/Library/Frameworks/SDL2.framework */
+            "/Library/Frameworks" SDL3_FRAMEWORK, /* /Library/Frameworks/SDL2.framework */
+            SDL3_LIBNAME /* oh well, anywhere the system can see the .dylib (/usr/local/lib or whatever) */
+        };
+
+        int i;
+        for (i = 0; i < (int) SDL_arraysize(dylib_locations); i++) {
+            const char *location = dylib_locations[i];
+            if (location) {
+                Loaded_SDL3 = dlopen(location, RTLD_LOCAL|RTLD_NOW);
+            } else { /* hack to mean "try homedir" */
+                const char *homedir = NULL;
+                struct passwd *pwent = getpwuid(getuid());
+                if (pwent) {
+                    homedir = pwent->pw_dir;
+                }
+                if (!homedir) {
+                    homedir = getenv("HOME");
+                }
+                if (homedir) {
+                    char framework[512];
+                    const int rc = snprintf(framework, sizeof (framework), "%s/Library/Frameworks/" SDL3_FRAMEWORK, homedir);
+                    if ((rc > 0) && (rc < (int) sizeof(framework))) {
+                        Loaded_SDL3 = dlopen(framework, RTLD_LOCAL|RTLD_NOW);
+                    }
+                }
+            }
+
+            if (Loaded_SDL3) {
+                return true;
+            }
+        }
+
+        return false; /* didn't find it anywhere reasonable. :( */
+    }
+#elif defined(SDL_PLATFORM_UNIX)
+    #include <dlfcn.h>
+    #ifdef __ANDROID__
+        #define SDL3_LIBNAME "libSDL3.so"
+    #else
+        #define SDL3_LIBNAME "libSDL3.so.0"
+    #endif
+    static void *Loaded_SDL3 = NULL;
+    #define LoadSDL3Library() ((Loaded_SDL3 = dlopen(SDL3_LIBNAME, RTLD_LOCAL|RTLD_NOW)) != NULL)
+    #define LookupSDL3Sym(sym) dlsym(Loaded_SDL3, sym)
+    #define CloseSDL3Library() { if (Loaded_SDL3) { dlclose(Loaded_SDL3); Loaded_SDL3 = NULL; } }
+#elif defined(__sorvi_platform__)
+    static void *Loaded_SDL3 = NULL;
+    #define __DATE__ "REPRODUCIBLE DATE"
+    #define __TIME__ "REPRODUCIBLE TIME"
+    #define LoadSDL3Library() 0xDEADBEEF
+    #define LookupSDL3Sym(sym) NULL
+    #define CloseSDL3Library()
+#else
+    #error Please define your platform.
+#endif
+
+#ifndef SDL3_REQUIRED_VER
+#define SDL3_REQUIRED_VER SDL_VERSIONNUM(3,2,12)
+#endif
+
 #ifndef DIRSEP
 #define DIRSEP "/"
 #endif
+
+
+static void *
+LoadSDL3Symbol(const char *fn, bool *okay)
+{
+    void *retval = NULL;
+    if (*okay) { /* only bother trying if we haven't previously failed. */
+        retval = LookupSDL3Sym(fn);
+        if (retval == NULL) {
+            char *p = SDL2COMPAT_stpcpy(loaderror, fn);
+            SDL2COMPAT_stpcpy(p, " missing in SDL3 library.");
+            *okay = false;
+        }
+    }
+    return retval;
+}
+
+static void
+UnloadSDL3(void)
+{
+    #define SDL3_SYM(rc,fn,params,args,ret) SDL3_##fn = NULL;
+    #include "sdl3_syms.h"
+    CloseSDL3Library();
+}
 
 // This is used for the Torchlight Linux port which predates the official SDL2 release
 static bool UseSDL2PrereleaseEvents;
@@ -322,6 +499,11 @@ static QuirkEntryType quirks[] = {
      */
     { "tauon/__main__.py", SDL_HINT_VIDEO_WAYLAND_SCALE_TO_DISPLAY, "0" },
     { "tauon/__main__.py", SDL_HINT_VIDEO_WAYLAND_ALLOW_LIBDECOR, "0" },
+
+    /* Domino-Chain relies on presented backbuffers having their contents preserved,
+     * which is undefined behavior on all but the software renderer.
+     */
+    { "domino-chain", SDL_HINT_RENDER_DRIVER, "software" },
 
 #ifdef SDL2COMPAT_HAVE_X11
     /* Stylus Labs Write does its own X11 input handling */
@@ -361,6 +543,61 @@ static QuirkEntryType quirks[] = {
 #endif
 };
 
+#if defined(__linux__) || defined(__GNU__)
+static void OS_GetExeName(char *buf, const unsigned maxpath, bool *use_base_path)
+{
+    int ret;
+    buf[0] = '\0';
+    ret = readlink("/proc/self/exe", buf, maxpath);
+    (void)ret;
+    if (strstr(buf, "/python")) {
+        /* Get the name of the script Python is running */
+        FILE *fp = fopen("/proc/self/cmdline", "r");
+        if (fp) {
+            char tmp[SDL2COMPAT_MAXPATH];
+            size_t len = fread(tmp, 1, sizeof(tmp) - 1, fp);
+            if (len > 0) {
+                char *spot = tmp, *end = tmp + len;
+                if (strstr(tmp, "python")) {
+                    /* Skip the name of the interpreter */
+                    while (spot < end) {
+                        if (*spot == '\0') {
+                            ++spot;
+                            break;
+                        }
+                        ++spot;
+                    }
+                }
+                if (spot < end) {
+                    /* Get the name of the script, including the directory containing it
+                     * e.g. /app/bin/src/tauon/__main__.py -> tauon/__main__.py
+                     */
+                    char *sep = strrchr(spot, '/');
+                    if (sep) {
+                        while (sep > spot) {
+                            --sep;
+                            if (*sep == '/') {
+                                ++sep;
+                                break;
+                            }
+                        }
+                        spot = sep;
+                    }
+                    snprintf(buf, maxpath, "%s", spot);
+                }
+                *use_base_path = false;
+            }
+            fclose(fp);
+        }
+    }
+}
+#elif defined(_WIN32)
+static void OS_GetExeName(char *buf, const unsigned maxpath, bool *use_base_path)
+{
+    buf[0] = '\0';
+    GetModuleFileNameA(NULL, buf, maxpath);
+}
+#elif defined(__APPLE__) || defined(SDL_PLATFORM_FREEBSD)
 static void OS_GetExeName(char *buf, const unsigned maxpath, bool *use_base_path)
 {
     const char *progname = getprogname();
@@ -370,6 +607,14 @@ static void OS_GetExeName(char *buf, const unsigned maxpath, bool *use_base_path
         buf[0] = '\0';
     }
 }
+#else
+#warning Please implement this for your platform.
+static void OS_GetExeName(char *buf, const unsigned maxpath, bool *use_base_path)
+{
+    buf[0] = '\0';
+    (void)maxpath;
+}
+#endif
 
 static const char *
 SDL2Compat_GetExeName(void)
@@ -395,7 +640,11 @@ SDL2Compat_GetExeName(void)
 SDL_DECLSPEC const char * SDLCALL
 SDL_GetPlatform(void)
 {
+#ifdef SDL_PLATFORM_MACOS
+    return "Mac OS X";
+#else
     return SDL3_GetPlatform();
+#endif
 }
 
 static struct {
@@ -737,6 +986,219 @@ SDL2Compat_ApplyQuirks(bool force_x11)
         UseSDL2PrereleaseEvents = true;
     }
 }
+
+
+/* DO NOT USE SDL3 FUNCTIONS IN HERE! It runs before main(), so app-supplied allocators are not set at this point.
+   This means no SDL_Log, no hint subsystem, nothing that might call SDL_SetError! In fact, favor code in this file, using
+   platform-specific #ifdefs, to calling into SDL3 at all, if you can help it. */
+static int
+LoadSDL3(void)
+{
+    bool okay = true;
+    if (!Loaded_SDL3) {
+        bool force_x11 = false;
+
+        #ifdef __linux__
+        void *global_symbols = dlopen(NULL, RTLD_LOCAL|RTLD_NOW);
+
+        /* Use linked libraries to detect what quirks we are likely to need */
+        if (global_symbols != NULL) {
+            if (dlsym(global_symbols, "glxewInit") != NULL) {  /* GLEW (e.g. Frogatto, SLUDGE) */
+                force_x11 = true;
+            } else if (dlsym(global_symbols, "cgGLEnableProgramProfiles") != NULL) {  /* NVIDIA Cg (e.g. Awesomenauts, Braid) */
+                force_x11 = true;
+            } else if (dlsym(global_symbols, "_Z7ssgInitv") != NULL) {  /* ::ssgInit(void) in plib (e.g. crrcsim) */
+                force_x11 = true;
+            }
+            dlclose(global_symbols);
+        }
+        #endif
+
+        WantDebugLogging = SDL2Compat_CheckDebugLogging();
+        if (WantDebugLogging) {
+            // force on the SDL3 debug logging, too, so we get info on backend choices, etc.
+            SDL2Compat_SetEnvAtStartup("SDL_DEBUG_LOGGING", "1");
+            // if SDL_DYNAMIC_API replaces us with some other SDL2, say so
+#if SDL_DYNAMIC_API
+            SDL_DynamicAPISetLogAtStartup(SDL2Compat_LogAtStartup);
+#endif
+        }
+
+        okay = LoadSDL3Library();
+        if (!okay) {
+            SDL2COMPAT_stpcpy(loaderror, "Failed loading SDL3 library.");
+        } else {
+            /* Load SDL_GetVersion() alone first to allow us to check and log the required SDL3 version */
+            SDL3_GetVersion = (SDL3_GetVersion_t) LoadSDL3Symbol("SDL_GetVersion", &okay);
+            if (okay) {
+                char sdl3verstr[16];
+                char sdl3reqverstr[16];
+                char sdl2compatverstr[16];
+                const int sdl3version = SDL3_GetVersion();
+                const int sdl3major = SDL_VERSIONNUM_MAJOR(sdl3version);
+                const int sdl3minor = SDL_VERSIONNUM_MINOR(sdl3version);
+                const int sdl3micro = SDL_VERSIONNUM_MICRO(sdl3version);
+                char *p;
+
+                #define SETVERSTR(str, major, minor, micro) { \
+                    char value[16]; \
+                    p = str; \
+                    SDL2COMPAT_itoa(value, major); p = SDL2COMPAT_stpcpy(p, value); *p++ = '.'; \
+                    SDL2COMPAT_itoa(value, minor); p = SDL2COMPAT_stpcpy(p, value); *p++ = '.'; \
+                    SDL2COMPAT_itoa(value, micro); p = SDL2COMPAT_stpcpy(p, value); \
+                }
+
+                SETVERSTR(sdl3verstr, sdl3major, sdl3minor, sdl3micro);
+                SETVERSTR(sdl3reqverstr, SDL_VERSIONNUM_MAJOR(SDL3_REQUIRED_VER), SDL_VERSIONNUM_MINOR(SDL3_REQUIRED_VER), SDL_VERSIONNUM_MICRO(SDL3_REQUIRED_VER));
+                SETVERSTR(sdl2compatverstr, 2, SDL2_COMPAT_VERSION_MINOR, SDL2_COMPAT_VERSION_PATCH);
+
+                #undef SETVERSTR
+
+                okay = (sdl3version >= SDL3_REQUIRED_VER);
+                if (!okay) {
+                    p = loaderror;
+                    p = SDL2COMPAT_stpcpy(p, "sdl2-compat ");
+                    p = SDL2COMPAT_stpcpy(p, sdl2compatverstr);
+                    p = SDL2COMPAT_stpcpy(p, ": SDL3 library is too old (have ");
+                    p = SDL2COMPAT_stpcpy(p, sdl3verstr);
+                    p = SDL2COMPAT_stpcpy(p, ", but need at least ");
+                    p = SDL2COMPAT_stpcpy(p, sdl3reqverstr);
+                    p = SDL2COMPAT_stpcpy(p, ").");
+                } else {
+                    if (WantDebugLogging) {
+                        char debugmsg[128];  /* can't use SDL log or malloc, just write to a stack buffer and do a simple platform-specific logging. */
+
+                        p = debugmsg;
+                        p = SDL2COMPAT_stpcpy(p, "sdl2-compat ");
+                        p = SDL2COMPAT_stpcpy(p, sdl2compatverstr);
+                        p = SDL2COMPAT_stpcpy(p, ", ");
+
+                        #if defined(__DATE__) && defined(__TIME__)
+                        p = SDL2COMPAT_stpcpy(p, "built on " __DATE__ " at " __TIME__ ", ");
+                        #endif
+
+                        p = SDL2COMPAT_stpcpy(p, "talking to SDL3 ");
+                        p = SDL2COMPAT_stpcpy(p, sdl3verstr);
+
+                        SDL2Compat_LogAtStartup(debugmsg);
+                    }
+                    SDL2Compat_ApplyQuirks(force_x11);  /* Apply and maybe print a list of any enabled quirks. */
+                    SDL2Compat_SetEnvAtStartup("SDL3_VERSION", sdl3verstr);
+                    SDL2Compat_SetEnvAtStartup("SDL2_COMPAT", "1");
+                }
+            }
+            #define SDL3_SYM(rc,fn,params,args,ret) SDL3_##fn = (SDL3_##fn##_t) LoadSDL3Symbol("SDL_" #fn, &okay);
+            #include "sdl3_syms.h"
+            if (!okay) {
+                UnloadSDL3();
+            }
+        }
+    }
+    return okay;
+}
+
+#if defined(_MSC_VER)
+
+/* NOLINTNEXTLINE(readability-redundant-declaration) */
+extern void *memcpy(void *dst, const void *src, size_t len);
+/* NOLINTNEXTLINE(readability-redundant-declaration) */
+extern void *memset(void *dst, int c, size_t len);
+#ifndef __INTEL_LLVM_COMPILER
+#pragma intrinsic(memcpy)
+#pragma intrinsic(memset)
+#endif
+#pragma function(memcpy)
+#pragma function(memset)
+
+/* NOLINTNEXTLINE(readability-inconsistent-declaration-parameter-name) */
+void *memcpy(void *dst, const void *src, size_t len)
+{
+    return SDL3_memcpy(dst, src, len);
+}
+
+/* NOLINTNEXTLINE(readability-inconsistent-declaration-parameter-name) */
+void *memset(void *dst, int c, size_t len)
+{
+    return SDL3_memset(dst, c, len);
+}
+#endif  /* MSVC */
+
+#if defined(__ICL) && defined(_WIN32)
+/* The classic Intel compiler generates calls to _intel_fast_memcpy
+ * and _intel_fast_memset when building an optimized SDL library */
+void *_intel_fast_memcpy(void *dst, const void *src, size_t len)
+{
+    return SDL3_memcpy(dst, src, len);
+}
+
+void *_intel_fast_memset(void *dst, int c, size_t len)
+{
+    return SDL3_memset(dst, c, len);
+}
+#endif
+
+#if defined(_WIN32)
+static void error_dialog(const char *errorMsg)
+{
+    MessageBoxA(NULL, errorMsg, "Error", MB_OK | MB_SETFOREGROUND | MB_ICONSTOP);
+}
+#elif defined(__APPLE__)
+extern void error_dialog(const char *errorMsg);
+#elif defined(__ANDROID__)
+static void error_dialog(const char *errorMsg)
+{
+    __android_log_print(ANDROID_LOG_FATAL, "SDL2COMPAT", "%s\n", errorMsg);
+}
+#else
+static void error_dialog(const char *errorMsg)
+{
+    fprintf(stderr, "%s\n", errorMsg);
+}
+#endif
+
+#if defined(__GNUC__) && !defined(_WIN32)
+#elif defined(_WIN32) && (defined(_MSC_VER) || defined(__MINGW32__) || defined(__WATCOMC__))
+#if defined(_MSC_VER) && !defined(__FLTUSED__)
+#define __FLTUSED__
+__declspec(selectany) int _fltused = 1;
+#endif
+#if defined(__MINGW32__)
+#define _DllMainCRTStartup DllMainCRTStartup
+#endif
+#if defined(__WATCOMC__)
+#define _DllMainCRTStartup LibMain
+#endif
+BOOL WINAPI _DllMainCRTStartup(HANDLE dllhandle, DWORD reason, LPVOID reserved)
+{
+    (void) dllhandle;
+    (void) reserved;
+    switch (reason) {
+    case DLL_PROCESS_DETACH:
+        UnloadSDL3();
+        break;
+
+    case DLL_PROCESS_ATTACH: /* init once for each new process */
+        if (!LoadSDL3()) {
+            error_dialog(loaderror);
+            #if 0
+            TerminateProcess(GetCurrentProcess(), 42);
+            ExitProcess(42);
+            #endif
+            return FALSE;
+        }
+        break;
+
+    case DLL_THREAD_ATTACH: /* thread-specific init. */
+    case DLL_THREAD_DETACH: /* thread-specific cleanup */
+        break;
+    }
+    return TRUE;
+}
+
+#else
+    #error Please define an init procedure for your platform.
+#endif
+
 
 /* Some SDL2 state we need to keep... */
 
@@ -2433,6 +2895,12 @@ EventFilter3to2(void *userdata, SDL_Event *event3)
                             mode == SDL_LOGICAL_PRESENTATION_DISABLED) {
                             SDL_RenderSetViewport(renderer, NULL);
                         }
+
+                        /* SDL2 overwrites the render scale when the window is resized, however, on SDL3,
+                         * the user set scale and logical presentation scales are separate, and will be
+                         * stacked when applied, so set the scale to 1.0 to avoid double scaling.
+                         */
+                        SDL3_SetRenderScale(renderer, 1.0f, 1.0f);
                     }
 
                     /* Fixes queue overflow with resize events that aren't processed */
@@ -2455,9 +2923,9 @@ EventFilter3to2(void *userdata, SDL_Event *event3)
                             SDL3_SetNumberProperty(props, PROP_WINDOW_EXPECTED_WIDTH, event2.window.data1);
                             SDL3_SetNumberProperty(props, PROP_WINDOW_EXPECTED_HEIGHT, event2.window.data2);
                             SDL3_SetFloatProperty(props, PROP_WINDOW_EXPECTED_SCALE, SDL3_GetWindowDisplayScale(window));
-                            if (!expected_w || !expected_h) {
-                                /* Don't send the initial size, SDL2 didn't in this case.
-                                 * ffplay breaks if the initial size is sent, see https://github.com/libsdl-org/sdl2-compat/issues/268 for details.
+                            if (!(SDL_GetWindowFlags(window) & SDL2_WINDOW_FULLSCREEN) && (!expected_w || !expected_h)) {
+                                /* Don't send the initial windowed size, SDL2 didn't in this case.
+                                 * ffplay breaks if the initial windowed size is sent, see https://github.com/libsdl-org/sdl2-compat/issues/268 for details.
                                  */
                                 break;
                             }
@@ -3568,6 +4036,13 @@ SDL_LoadBMP_RW(SDL2_RWops *rwops2, int freesrc)
     if (rwops2 && freesrc) {
         SDL_RWclose(rwops2);
     }
+
+    if (retval && SDL_BITSPERPIXEL(retval->format) < 8) {  /* SDL3 can provide BMPs that are < 8bpp. In SDL2, these would get converted to 8bpp. */
+        SDL_Surface *cvt = SDL3_ConvertSurfaceAndColorspace(retval, SDL_PIXELFORMAT_INDEX8, SDL3_GetSurfacePalette(retval), SDL3_GetSurfaceColorspace(retval), 0);
+        SDL3_DestroySurface(retval);
+        retval = cvt;  /* if conversion failed, Surface3to2(), below, will notice. */
+    }
+
     return Surface3to2(retval);
 }
 
@@ -3928,8 +4403,7 @@ SDL_FreeSurface(SDL2_Surface *surface)
     }
 
     if (surface->map) {
-        SDL_Surface *surface3 = (SDL_Surface *)surface->map;
-        SDL3_DestroySurface(surface3);
+        SDL3_DestroySurface(Surface2to3(surface));
         surface->map = NULL;
     }
 
@@ -5578,6 +6052,11 @@ SDL_RenderSetLogicalSize(SDL_Renderer *renderer, int w, int h)
             mode = SDL_LOGICAL_PRESENTATION_LETTERBOX;
         }
     }
+
+    /* SDL2 overwrites the user set scale when setting the logical size, while SDL3 tracks it separately.
+     * Set to 1.0 to avoid double scaling within SDL3.
+     */
+    SDL3_SetRenderScale(renderer, 1.0f, 1.0f);
 
     retval = SDL3_SetRenderLogicalPresentation(renderer, w, h, mode) ? 0 : -1;
     return retval < 0 ? retval : FlushRendererIfNotBatching(renderer);
@@ -8567,12 +9046,15 @@ SDL_GetWindowFlags(SDL_Window *window)
 {
     Uint32 flags3 = (Uint32) SDL3_GetWindowFlags(window);
     Uint32 flags = (flags3 & ~(SDL2_WINDOW_SHOWN | SDL2_WINDOW_FULLSCREEN | SDL2_WINDOW_FULLSCREEN_DESKTOP | SDL2_WINDOW_SKIP_TASKBAR | SDL2_WINDOW_ALWAYS_ON_TOP));
+    SDL_PropertiesID props;
 
     /* If we get no flags back from SDL3, check if the window is actually valid */
     if (flags3 == 0 && SDL3_GetWindowID(window) == 0) {
         /* SDL2 always returns 0 for an invalid window */
         return 0;
     }
+
+    props = SDL3_GetWindowProperties(window);
 
     if ((flags3 & SDL2_WINDOW_HIDDEN) == 0) {
         flags |= SDL2_WINDOW_SHOWN;
@@ -8590,6 +9072,15 @@ SDL_GetWindowFlags(SDL_Window *window)
     if (flags3 & SDL3_WINDOW_ALWAYS_ON_TOP) {
         flags |= SDL2_WINDOW_ALWAYS_ON_TOP;
     }
+
+    /* SDL2 sets grab flags unconditionally, but SDL3 sets them only on success */
+    if (SDL3_GetBooleanProperty(props, PROP_WINDOW_KEYBOARD_GRABBED, false)) {
+        flags |= SDL_WINDOW_KEYBOARD_GRABBED;
+    }
+    if (SDL3_GetBooleanProperty(props, PROP_WINDOW_MOUSE_GRABBED, false)) {
+        flags |= SDL_WINDOW_MOUSE_GRABBED;
+    }
+
     return flags;
 }
 
@@ -8761,6 +9252,14 @@ SDL_CreateWindow(const char *title, int x, int y, int w, int h, Uint32 flags)
     }
 
     if (window) {
+        SDL_PropertiesID props = SDL3_GetWindowProperties(window);
+
+        if (flags & SDL_WINDOW_KEYBOARD_GRABBED) {
+            SDL3_SetBooleanProperty(props, PROP_WINDOW_KEYBOARD_GRABBED, true);
+        }
+        if (flags & SDL_WINDOW_MOUSE_GRABBED) {
+            SDL3_SetBooleanProperty(props, PROP_WINDOW_MOUSE_GRABBED, true);
+        }
         if (exclusive_fullscreen) {
             ApplyFullscreenMode(window);
             SDL3_SetWindowFullscreen(window, true);
@@ -9294,28 +9793,66 @@ SDL_RestoreWindow(SDL_Window *window)
 SDL_DECLSPEC void SDLCALL
 SDL_SetWindowGrab(SDL_Window *window, SDL2_bool grabbed)
 {
-    SDL3_SetWindowMouseGrab(window, grabbed);
+    SDL_SetWindowMouseGrab(window, grabbed);
     if (SDL3_GetHintBoolean("SDL_GRAB_KEYBOARD", false)) {
-        SDL3_SetWindowKeyboardGrab(window, grabbed);
+        SDL_SetWindowKeyboardGrab(window, grabbed);
     }
 }
 
 SDL_DECLSPEC SDL2_bool SDLCALL
 SDL_GetWindowGrab(SDL_Window *window)
 {
-    return SDL3_GetWindowKeyboardGrab(window) || SDL3_GetWindowMouseGrab(window) ? SDL2_TRUE : SDL2_FALSE;
+    if (SDL3_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) {
+        SDL_PropertiesID props = SDL3_GetWindowProperties(window);
+        return SDL3_GetBooleanProperty(props, PROP_WINDOW_KEYBOARD_GRABBED, false) ||
+               SDL3_GetBooleanProperty(props, PROP_WINDOW_MOUSE_GRABBED, false) ? SDL2_TRUE : SDL2_FALSE;
+    }
+
+    /* Input focus is required to be the grab window */
+    return SDL2_FALSE;
 }
 
 SDL_DECLSPEC void SDLCALL
 SDL_SetWindowKeyboardGrab(SDL_Window *window, SDL2_bool grabbed)
 {
+    SDL_Window *prev_grab_wind = SDL3_GetGrabbedWindow();
+
+    if (!window) {
+        SDL3_SetError("Invalid window");
+        return;
+    }
+
     SDL3_SetWindowKeyboardGrab(window, grabbed);
+
+    if (prev_grab_wind && prev_grab_wind != window && grabbed) {
+        /* Stealing grab from another window ends both types of grab */
+        SDL_PropertiesID prev_wind_props = SDL3_GetWindowProperties(prev_grab_wind);
+        SDL3_SetBooleanProperty(prev_wind_props, PROP_WINDOW_KEYBOARD_GRABBED, false);
+        SDL3_SetBooleanProperty(prev_wind_props, PROP_WINDOW_MOUSE_GRABBED, false);
+    }
+    SDL3_SetBooleanProperty(SDL3_GetWindowProperties(window), PROP_WINDOW_KEYBOARD_GRABBED, grabbed);
 }
 
 SDL_DECLSPEC void SDLCALL
 SDL_SetWindowMouseGrab(SDL_Window *window, SDL2_bool grabbed)
 {
+    SDL_Window *prev_grab_wind;
+
+    if (!window) {
+        SDL3_SetError("Invalid window");
+        return;
+    }
+
+    prev_grab_wind = SDL3_GetGrabbedWindow();
     SDL3_SetWindowMouseGrab(window, grabbed);
+
+    if (prev_grab_wind && prev_grab_wind != window && grabbed) {
+        /* Stealing grab from another window ends both types of grab */
+        SDL_PropertiesID prev_wind_props = SDL3_GetWindowProperties(prev_grab_wind);
+        SDL3_SetBooleanProperty(prev_wind_props, PROP_WINDOW_KEYBOARD_GRABBED, false);
+        SDL3_SetBooleanProperty(prev_wind_props, PROP_WINDOW_MOUSE_GRABBED, false);
+    }
+    SDL3_SetBooleanProperty(SDL3_GetWindowProperties(window), PROP_WINDOW_MOUSE_GRABBED, grabbed);
 }
 
 /* SDL3 added a return value and renamed this. We just throw the value away for SDL2. */
@@ -11995,6 +12532,24 @@ SDL_IntersectFRectAndLine(const SDL_FRect *rect, float *X1, float *Y1, float *X2
     return SDL2_TRUE;
 }
 
+#if defined(SDL_PLATFORM_WINDOWS)
+
+SDL_DECLSPEC SDL_Thread *SDLCALL
+SDL_CreateThread(SDL_ThreadFunction fn, const char *name, void *data,
+                 pfnSDL_CurrentBeginThread pfnBeginThread, pfnSDL_CurrentEndThread pfnEndThread)
+{
+    return SDL2_CreateThread(fn, name, data, (SDL_FunctionPointer) pfnBeginThread, (SDL_FunctionPointer) pfnEndThread);
+}
+
+SDL_DECLSPEC SDL_Thread *SDLCALL
+SDL_CreateThreadWithStackSize(SDL_ThreadFunction fn, const char *name, const size_t stacksize, void *data,
+                              pfnSDL_CurrentBeginThread pfnBeginThread, pfnSDL_CurrentEndThread pfnEndThread)
+{
+    return SDL2_CreateThreadWithStackSize(fn, name, stacksize, data, (SDL_FunctionPointer) pfnBeginThread, (SDL_FunctionPointer) pfnEndThread);
+}
+
+#else
+
 SDL_DECLSPEC SDL_Thread *SDLCALL
 SDL_CreateThread(SDL_ThreadFunction fn, const char *name, void *data)
 {
@@ -12006,6 +12561,8 @@ SDL_CreateThreadWithStackSize(SDL_ThreadFunction fn, const char *name, const siz
 {
     return SDL2_CreateThreadWithStackSize(fn, name, stacksize, data, NULL, NULL);
 }
+
+#endif /* SDL_PLATFORM_WINDOWS */
 
 SDL_DECLSPEC unsigned long SDLCALL
 SDL_ThreadID(void)
@@ -12044,6 +12601,97 @@ SDL_UnloadObject(void *lib)
 {
     SDL3_UnloadObject((SDL_SharedObject *) lib);
 }
+
+#if defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_WINGDK)
+SDL_DECLSPEC int SDLCALL
+SDL_Direct3D9GetAdapterIndex(int displayIndex)
+{
+    return SDL3_GetDirect3D9AdapterIndex(Display_IndexToID(displayIndex));
+}
+
+SDL_DECLSPEC SDL2_bool SDLCALL
+SDL_DXGIGetOutputInfo(int displayIndex, int *adapterIndex, int *outputIndex)
+{
+    return SDL3_GetDXGIOutputInfo(Display_IndexToID(displayIndex), adapterIndex, outputIndex) ? SDL2_TRUE : SDL2_FALSE;
+}
+
+SDL_DECLSPEC IDirect3DDevice9 * SDLCALL SDL_RenderGetD3D9Device(SDL_Renderer *renderer)
+{
+    return (IDirect3DDevice9 *)SDL3_GetPointerProperty(SDL3_GetRendererProperties(renderer),
+                                                SDL_PROP_RENDERER_D3D9_DEVICE_POINTER, NULL);
+}
+
+SDL_DECLSPEC ID3D11Device * SDLCALL SDL_RenderGetD3D11Device(SDL_Renderer *renderer)
+{
+    return (ID3D11Device *)SDL3_GetPointerProperty(SDL3_GetRendererProperties(renderer),
+                                            SDL_PROP_RENDERER_D3D11_DEVICE_POINTER, NULL);
+}
+
+SDL_DECLSPEC ID3D12Device * SDLCALL SDL_RenderGetD3D12Device(SDL_Renderer *renderer)
+{
+    return (ID3D12Device *)SDL3_GetPointerProperty(SDL3_GetRendererProperties(renderer),
+                                            SDL_PROP_RENDERER_D3D12_DEVICE_POINTER, NULL);
+}
+#endif
+
+#if defined(SDL_PLATFORM_GDK)
+SDL_DECLSPEC int SDLCALL
+SDL_GDKRunApp(SDL_main_func mainFunction, void *reserved)
+{
+    return SDL3_RunApp(0, NULL, mainFunction, reserved);
+}
+#endif
+
+#ifdef SDL_PLATFORM_IOS
+SDL_DECLSPEC int SDLCALL
+SDL_UIKitRunApp(int argc, char *argv[], SDL_main_func mainFunction)
+{
+    return SDL3_RunApp(argc, argv, mainFunction, NULL);
+}
+
+SDL_DECLSPEC void SDLCALL
+SDL_iPhoneSetEventPump(SDL2_bool enabled)
+{
+    SDL3_SetiOSEventPump(enabled);
+}
+#endif
+
+#ifdef SDL_PLATFORM_ANDROID
+SDL_DECLSPEC int SDLCALL
+SDL_AndroidGetExternalStorageState(void)
+{
+    return (int)SDL3_GetAndroidExternalStorageState();
+}
+
+static void SDLCALL AndroidRequestPermissionBlockingCallback(void *userdata, const char *permission, bool granted)
+{
+    SDL3_SetAtomicInt((SDL_AtomicInt *) userdata, granted ? 1 : -1);
+}
+
+SDL_DECLSPEC SDL2_bool SDLCALL
+SDL_AndroidRequestPermission(const char *permission)
+{
+    SDL_AtomicInt response;
+    SDL3_SetAtomicInt(&response, 0);
+
+    if (!SDL3_RequestAndroidPermission(permission, AndroidRequestPermissionBlockingCallback, &response)) {
+        return SDL2_FALSE;
+    }
+
+    /* Wait for the request to complete */
+    while (SDL3_GetAtomicInt(&response) == 0) {
+        SDL3_Delay(10);
+    }
+
+    return (SDL3_GetAtomicInt(&response) < 0) ? SDL2_FALSE : SDL2_TRUE;
+}
+
+SDL_DECLSPEC SDL2_bool SDLCALL
+SDL_IsAndroidTV(void)
+{
+    return SDL3_IsTV() ? SDL2_TRUE : SDL2_FALSE;
+}
+#endif
 
 #ifdef __cplusplus
 }

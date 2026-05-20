@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.15.0",
     .dependencies = .{
         .@"sdl2-compat" = .{
-            .url = "git+https://github.com/libsdl-org/sdl2-compat.git#99c147df4408cebbc30c255d4788b0c81a5112a0",
-            .hash = "N-V-__8AAOEOdANP6DOO_0dDTXjLm2eIRTPk0iIt8RRqoaSW",
+            .url = "git+https://github.com/libsdl-org/sdl2-compat.git#4168a149294350fc170215ff5a35b61177e81f4d",
+            .hash = "N-V-__8AAIYsdAOi1rH6mGkbZGIU1NR_bQaDvCh_ovCF0hdW",
         },
         .SDL_image = .{
             .url = "git+https://github.com/libsdl-org/SDL_image#release-2.8.8",
