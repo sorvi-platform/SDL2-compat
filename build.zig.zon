@@ -9,8 +9,8 @@
             .hash = "N-V-__8AAIYsdAOi1rH6mGkbZGIU1NR_bQaDvCh_ovCF0hdW",
         },
         .SDL_image = .{
-            .url = "git+https://github.com/libsdl-org/SDL_image#release-2.8.8",
-            .hash = "N-V-__8AAKRucwHcn1zFy3DOHtYOAEi4o2snwimP-Ot_4S01",
+            .url = "git+https://github.com/libsdl-org/SDL_image.git?ref=release-2.8.12#12cb2e40330d256d9b1329647be8f366546d715c",
+            .hash = "N-V-__8AAPiNcwFxT_wsd1qMw3xmMIok1oIn3p0aiQnQrYQs",
         },
         .harfbuzz = .{
             .url = "git+https://github.com/allyourcodebase/harfbuzz#6bb522d22cee0ce1d1446bd59fa5b0417f25303e",
