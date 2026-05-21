@@ -13,12 +13,12 @@
             .hash = "N-V-__8AAPiNcwFxT_wsd1qMw3xmMIok1oIn3p0aiQnQrYQs",
         },
         .harfbuzz = .{
-            .url = "git+https://github.com/allyourcodebase/harfbuzz#6bb522d22cee0ce1d1446bd59fa5b0417f25303e",
-            .hash = "harfbuzz-8.5.0-Ip1VAqCZAADRh-K2AVujG0N3VAal-AKwkZrvlYOaloyB",
+            .url = "git+https://github.com/allyourcodebase/harfbuzz#d055840ecefefcd57f5ddeb2fa8c83fafed1a40b",
+            .hash = "harfbuzz-14.1.0-Ip1VAuGZAAC1jdxPHOMPoHyi-50Hm_q4bveaVflELHGw",
         },
         .freetype = .{
-            .url = "git+https://github.com/allyourcodebase/freetype#9d847affbd224cf6a7303ad6d98715e3675ef78c",
-            .hash = "freetype-2.13.3-C3-WdeyJAAD9z8BeYYQ8N3gNlPI9NvHRxg5039S5vhz7",
+            .url = "git+https://github.com/allyourcodebase/freetype#884fd2235e6ae1ec4306eda30b3259f20930ed2e",
+            .hash = "freetype-2.14.3-C3-WdXSKAAB-kHs4qgRoeoFnRkNQn6M_SSlUGZ6ywgBQ",
         },
         .SDL_ttf = .{
             .url = "git+https://github.com/libsdl-org/SDL_ttf#release-2.24.0",
