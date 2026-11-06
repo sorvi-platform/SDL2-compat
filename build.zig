@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -23,23 +21,18 @@ pub fn build(b: *std.Build) void {
         .HAVE_STDDEF_H = true,
         .HAVE_STDINT_H = true,
         .HAVE_LIBC = true,
-        .HAVE_GETHOSTNAME = false,
         .HAVE_SETENV = false,
         .HAVE_PUTENV = false,
         .HAVE_UNSETENV = false,
         .HAVE__STRREV = false,
         .HAVE_INDEX = false,
         .HAVE_RINDEX = false,
-        .HAVE_STRNSTR = false,
         .HAVE_ITOA = false,
         .HAVE__LTOA = false,
         .HAVE__UITOA = false,
         .HAVE__ULTOA = false,
         .HAVE__I64TOA = false,
         .HAVE__UI64TOA = false,
-        .HAVE__COPYSIGN = false,
-        .HAVE_ISINFF = false,
-        .HAVE_ISNANF = false,
         .HAVE_FOPEN64 = false,
         .HAVE_FSEEKO64 = false,
         .HAVE_MEMFD_CREATE = false,
@@ -55,7 +48,6 @@ pub fn build(b: *std.Build) void {
         .HAVE_POLL = false,
         .HAVE_ALTIVEC_H = false,
         .HAVE_DBUS_DBUS_H = false,
-        .HAVE_FCITX_H = false,
         .HAVE_IBUS_IBUS_H = false,
         .HAVE_SYS_INOTIFY_H = false,
         .HAVE_INOTIFY_INIT = false,
@@ -98,7 +90,6 @@ pub fn build(b: *std.Build) void {
         .SDL_THREADS_DISABLED = false,
         .SDL_TIMERS_DISABLED = false,
         .SDL_VIDEO_DISABLED = false,
-        .SDL_GPU_DISABLED = false,
         .SDL_POWER_DISABLED = false,
         .SDL_FILESYSTEM_DISABLED = false,
         .SDL_LOCALE_DISABLED = false,
@@ -142,7 +133,6 @@ pub fn build(b: *std.Build) void {
         .SDL_AUDIO_DRIVER_PSP = false,
         .SDL_AUDIO_DRIVER_PS2 = false,
         .SDL_AUDIO_DRIVER_N3DS = false,
-        .SDL_AUDIO_DRIVER_NGAGE = false,
         .SDL_INPUT_LINUXEV = false,
         .SDL_INPUT_LINUXKD = false,
         .SDL_INPUT_FBSDKBIO = false,
@@ -152,7 +142,6 @@ pub fn build(b: *std.Build) void {
         .SDL_JOYSTICK_DINPUT = false,
         .SDL_JOYSTICK_DUMMY = true,
         .SDL_JOYSTICK_EMSCRIPTEN = false,
-        .SDL_JOYSTICK_GAMEINPUT = false,
         .SDL_JOYSTICK_HAIKU = false,
         .SDL_JOYSTICK_HIDAPI = false,
         .SDL_JOYSTICK_IOKIT = false,
@@ -188,7 +177,6 @@ pub fn build(b: *std.Build) void {
         .SDL_LOADSO_WINDOWS = false,
         .SDL_LOADSO_OS2 = false,
         .SDL_THREAD_GENERIC_COND_SUFFIX = false,
-        .SDL_THREAD_GENERIC_RWLOCK_SUFFIX = false,
         .SDL_THREAD_PTHREAD = true,
         .SDL_THREAD_PTHREAD_RECURSIVE_MUTEX = true,
         .SDL_THREAD_PTHREAD_RECURSIVE_MUTEX_NP = false,
@@ -218,18 +206,15 @@ pub fn build(b: *std.Build) void {
         .SDL_VIDEO_DRIVER_DIRECTFB = false,
         .SDL_VIDEO_DRIVER_DIRECTFB_DYNAMIC = "",
         .SDL_VIDEO_DRIVER_N3DS = false,
-        .SDL_VIDEO_DRIVER_NGAGE = false,
         .SDL_VIDEO_DRIVER_OFFSCREEN = false,
         .SDL_VIDEO_DRIVER_PS2 = false,
         .SDL_VIDEO_DRIVER_PSP = false,
         .SDL_VIDEO_DRIVER_RISCOS = false,
-        .SDL_VIDEO_DRIVER_ROCKCHIP = false,
         .SDL_VIDEO_DRIVER_RPI = false,
         .SDL_VIDEO_DRIVER_UIKIT = false,
         .SDL_VIDEO_DRIVER_VITA = false,
         .SDL_VIDEO_DRIVER_VIVANTE = false,
         .SDL_VIDEO_DRIVER_VIVANTE_VDK = false,
-        .SDL_VIDEO_DRIVER_OPENVR = false,
         .SDL_VIDEO_DRIVER_WAYLAND = false,
         .SDL_VIDEO_DRIVER_WAYLAND_QT_TOUCH = false,
         .SDL_VIDEO_DRIVER_WAYLAND_DYNAMIC = "",
@@ -247,8 +232,6 @@ pub fn build(b: *std.Build) void {
         .SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2 = "",
         .SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR = "",
         .SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS = "",
-        .SDL_VIDEO_DRIVER_X11_DYNAMIC_XTEST = "",
-        .SDL_VIDEO_DRIVER_X11_HAS_XKBLIB = false,
         .SDL_VIDEO_DRIVER_X11_HAS_XKBKEYCODETOKEYSYM = false,
         .SDL_VIDEO_DRIVER_X11_SUPPORTS_GENERIC_EVENTS = false,
         .SDL_VIDEO_DRIVER_X11_XCURSOR = false,
@@ -256,13 +239,9 @@ pub fn build(b: *std.Build) void {
         .SDL_VIDEO_DRIVER_X11_XFIXES = false,
         .SDL_VIDEO_DRIVER_X11_XINPUT2 = false,
         .SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_MULTITOUCH = false,
-        .SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_SCROLLINFO = false,
-        .SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_GESTURE = false,
         .SDL_VIDEO_DRIVER_X11_XRANDR = false,
         .SDL_VIDEO_DRIVER_X11_XSCRNSAVER = false,
         .SDL_VIDEO_DRIVER_X11_XSHAPE = false,
-        .SDL_VIDEO_DRIVER_X11_XSYNC = false,
-        .SDL_VIDEO_DRIVER_X11_XTEST = false,
         .SDL_VIDEO_DRIVER_OS2 = false,
         .SDL_VIDEO_DRIVER_QNX = false,
         .SDL_VIDEO_RENDER_D3D = false,
@@ -273,7 +252,6 @@ pub fn build(b: *std.Build) void {
         .SDL_VIDEO_RENDER_OGL_ES = true,
         .SDL_VIDEO_RENDER_OGL_ES2 = true,
         .SDL_VIDEO_RENDER_DIRECTFB = false,
-        .SDL_VIDEO_RENDER_NGAGE = false,
         .SDL_VIDEO_RENDER_PS2 = false,
         .SDL_VIDEO_RENDER_PSP = false,
         .SDL_VIDEO_RENDER_VITA_GXM = false,
@@ -295,12 +273,9 @@ pub fn build(b: *std.Build) void {
         .SDL_POWER_WINRT = false,
         .SDL_POWER_MACOSX = false,
         .SDL_POWER_UIKIT = false,
-        .SDL_POWER_DUMMY = true,
-        .SDL_POWER_RISCOS = false,
         .SDL_POWER_HAIKU = false,
         .SDL_POWER_HARDWIRED = false,
         .SDL_POWER_EMSCRIPTEN = false,
-        .SDL_POWER_OS2 = false,
         .SDL_POWER_VITA = false,
         .SDL_POWER_PSP = false,
         .SDL_POWER_N3DS = false,
@@ -469,4 +444,46 @@ pub fn build(b: *std.Build) void {
     libSDL_ttf.root_module.linkLibrary(freetype_dep.artifact("freetype"));
     libSDL_ttf.root_module.linkLibrary(libSDL2);
     b.installArtifact(libSDL_ttf);
+
+    const sdl_mixer_dep = b.dependency("SDL_mixer", .{});
+
+    const libSDL_mixer = b.addLibrary(.{
+        .name = "SDL_mixer",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .sanitize_c = .off,
+        }),
+    });
+    libSDL_mixer.root_module.addSystemIncludePath(libSDL2.installed_headers.items[0].getSource().path(b, "SDL2"));
+    libSDL_mixer.root_module.addIncludePath(sdl_mixer_dep.path("src"));
+    libSDL_mixer.root_module.addIncludePath(sdl_mixer_dep.path("src/codecs"));
+    libSDL_mixer.root_module.addIncludePath(sdl_mixer_dep.path("include"));
+    libSDL_mixer.installHeadersDirectory(sdl_mixer_dep.path("include"), "", .{});
+    libSDL_mixer.root_module.addCSourceFiles(.{
+        .files = &.{
+            "codecs/load_aiff.c",
+            "codecs/load_voc.c",
+            "codecs/mp3utils.c",
+            "codecs/music_cmd.c",
+            "codecs/music_drflac.c",
+            "codecs/music_minimp3.c",
+            "codecs/music_modplug.c",
+            "codecs/music_ogg_stb.c",
+            "codecs/music_wav.c",
+            "codecs/remap_channels.c",
+            "effect_position.c",
+            "effects_internal.c",
+            "mixer.c",
+            "music.c",
+            "utils.c",
+        },
+        .root = sdl_mixer_dep.path("src"),
+    });
+    libSDL_mixer.root_module.linkLibrary(libSDL2);
+    b.installArtifact(libSDL_mixer);
 }
+
+const std = @import("std");

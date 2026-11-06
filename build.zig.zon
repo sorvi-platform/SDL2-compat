@@ -2,7 +2,7 @@
     .name = .SDL2,
     .version = "2.32.10",
     .fingerprint = 0x1b740bc5ab3c5fb7,
-    .minimum_zig_version = "0.15.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .@"sdl2-compat" = .{
             .url = "git+https://github.com/libsdl-org/sdl2-compat.git#4168a149294350fc170215ff5a35b61177e81f4d",
@@ -23,6 +23,10 @@
         .SDL_ttf = .{
             .url = "git+https://github.com/libsdl-org/SDL_ttf#release-2.24.0",
             .hash = "N-V-__8AAExyawHN-VzU8pDUcAbATFXJ-rvnOkSgARNDjyJb",
+        },
+        .SDL_mixer = .{
+            .url = "git+https://github.com/libsdl-org/SDL_mixer.git?ref=release-2.8.2#b208916aed9250fe434360e6c6a95f0697bb7b01",
+            .hash = "N-V-__8AANaETgHvNyF-Z1K5FNDHUxZa9UcMCfK2RTmDIveW",
         },
     },
     .paths = .{
